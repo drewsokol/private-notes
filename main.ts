@@ -1,36 +1,18 @@
 import { type MarkdownPostProcessorContext, Plugin, PluginSettingTab, Setting, TFile, App} from 'obsidian';
 import PrivateNote from './Components/PrivateNote.svelte';
-import PasswordSetting from './Components/PasswordSetting.svelte';
+import { PrivateNotesPluginSettingTab } from 'settings/PrivateNotesPluginSettingTab';
 import { v4 as uuidv4 } from 'uuid';
+import type { PrivateNotesPluginSettings } from 'settings/PrivateNotesPluginSettings';
 
 interface PrivateNoteBlock {
   uuid: string;
   content: string;
 }
 
-interface PrivateNotesPluginSettings {
-  masterPassword: string;
-}
-
-class PrivateNotesPlugin extends Plugin {
+export default class PrivateNotesPlugin extends Plugin {
   settings!: PrivateNotesPluginSettings;
   private isAddingUuid: boolean = false;
   private uuidLockWaitTime: number = 5000;
-
-  private extractBlocks<T extends { content: string }>(
-    content: string,
-    regex: RegExp
-  ): T[] {
-    const blocks: T[] = [];
-    let match: RegExpExecArray | null;
-
-    while ((match = regex.exec(content)) !== null) {
-      const extractedContent = match[1].trim();
-      blocks.push({ content: extractedContent } as T);
-    }
-
-    return blocks;
-  };
 
   private async addUniqueIdentifierIfNotExist(file: TFile) {
     this.isAddingUuid = true; //lock
@@ -69,7 +51,7 @@ class PrivateNotesPlugin extends Plugin {
           if (currentFile) {
             const startTime = Date.now();
             while (this.isAddingUuid){
-              if (Date.now() - startTime > 5000){
+              if (Date.now() - startTime > this.uuidLockWaitTime){
                 console.error('Timeout waiting for UUID lock');
                 return;
               }
@@ -99,40 +81,3 @@ class PrivateNotesPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 }
-
-class PrivateNotesPluginSettingTab extends PluginSettingTab {
-  plugin: PrivateNotesPlugin;
-
-  constructor(app: App, plugin: PrivateNotesPlugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-
-  display(): void {
-    let {containerEl} = this;
-
-    containerEl.empty();
-
-      const id = uuidv4();
-      new PasswordSetting({
-        target: containerEl,
-        props: {
-          name: 'Master password',
-          desc: `Enter a master password used to encrypt or decrypt your notes.
-            The password must be the same as the one used to encrypt the note
-            or it will not be viewable.`,
-          warning: `Do not use real passwords. This is not super secure. For most, it'll
-            stop a standard user from reading the private notes. Tech savy individuals
-            can break this.`,
-          onInput: async (event: { target: { value: string; }; }) => {
-            this.plugin.settings.masterPassword = event.target.value;
-            await this.plugin.saveSettings();
-          },
-          value: this.plugin.settings.masterPassword,
-          id: id
-        }
-      });
-  }
-}
-
-module.exports = PrivateNotesPlugin;

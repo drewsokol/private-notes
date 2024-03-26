@@ -1,12 +1,12 @@
-export function hexStringToUint8Array(hexString) {
-  return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+export function hexStringToUint8Array(hexString : string) : Uint8Array {
+  return new Uint8Array(hexString.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
 }
 
-export function uint8ArrayToHexString(uint8Array) {
+export function uint8ArrayToHexString(uint8Array: Uint8Array) : string {
   return Array.from(uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function initializeEncryptionKey() {
+export async function initializeEncryptionKey() : Promise<CryptoKey> {
   const keyMaterial = await window.crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode('AbraKadabra12345'),
@@ -17,7 +17,7 @@ export async function initializeEncryptionKey() {
   return keyMaterial;
 }
 
-export async function encryptString(inputString) {
+export async function encryptString(inputString : string) : Promise<string> {
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const encryptedValue = await window.crypto.subtle.encrypt(
     {
@@ -30,7 +30,7 @@ export async function encryptString(inputString) {
   return uint8ArrayToHexString(iv) + uint8ArrayToHexString(new Uint8Array(encryptedValue));
 }
 
-export async function decryptString(encryptedString) {
+export async function decryptString(encryptedString : string) : Promise<string> {
   if (!encryptedString) {
     return "";
   }

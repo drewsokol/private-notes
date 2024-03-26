@@ -1,5 +1,5 @@
 <script>
-	import { initializeEncryptionKey, encryptString, decryptString } from '../Utils/utils.js';
+	import { initializeEncryptionKey, encryptString, decryptString } from '../Utils/utils.ts';
 	import { onMount } from "svelte";
 
   let visible = false;
