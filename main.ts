@@ -15,8 +15,6 @@ export default class PrivateNotesPlugin extends Plugin {
   private uuidLockWaitTime: number = 5000;
 
   private async addUniqueIdentifierIfNotExist(file: TFile) {
-    this.isAddingUuid = true; //lock
-
     const currentFileContent = await this.app.vault.read(file);
     const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
     const frontmatterMatch = frontmatterRegex.exec(currentFileContent);
@@ -33,8 +31,24 @@ export default class PrivateNotesPlugin extends Plugin {
       await this.app.vault.modify(file, updatedContent);
     }
 
-    this.isAddingUuid = false; //unlock
     return uuid as string;
+  };
+
+  private async aquireUuidLock() {
+    const startTime = Date.now();
+    while (this.isAddingUuid){
+      if (Date.now() - startTime > this.uuidLockWaitTime){
+        console.error('Timeout waiting for UUID lock');
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));  // wait for 100 ms to try again
+    };
+
+    this.isAddingUuid = true;
+  };
+
+  private releaseUuidLock() {
+    this.isAddingUuid = false;
   }
 
   async onload() {
@@ -45,23 +59,35 @@ export default class PrivateNotesPlugin extends Plugin {
       'privateNote',
       async (source: string, el: HTMLElement, _: MarkdownPostProcessorContext) => 
         { 
-          let currentUniqueIdentifier = '';
-
           const currentFile = this.app.workspace.getActiveFile();
-          if (currentFile) {
-            const startTime = Date.now();
-            while (this.isAddingUuid){
-              if (Date.now() - startTime > this.uuidLockWaitTime){
-                console.error('Timeout waiting for UUID lock');
-                return;
-              }
-              await new Promise(resolve => setTimeout(resolve, 100));  // wait for 100 ms to try again
-            };
 
-            currentUniqueIdentifier = await this.addUniqueIdentifierIfNotExist(currentFile);
+          //check for uuid on parent note file. If it doesn't exist, add it.
+          if (currentFile) {
+            await this.aquireUuidLock();
+            await this.addUniqueIdentifierIfNotExist(currentFile);
+            this.releaseUuidLock();
           }
 
-          console.log('UUID: ', currentUniqueIdentifier);
+          //check for uuid in the block. If it doesn't exist, add it.
+          const uuidRegex = /uuid: (.*)/i;
+          const uuidMatch = uuidRegex.exec(source);
+          let uuid: string | null = uuidMatch ? uuidMatch[1] : null;
+
+          if (!uuid){
+            uuid = uuidv4();
+            let newSource = `uuid: ${uuid}\n${source}`; //create a new source including the uuid
+
+            if (currentFile){
+              await this.aquireUuidLock();
+              const currentFileContent = await this.app.vault.read(currentFile);
+              const blockRegex = new RegExp(`\\\`{3}privateNote\\n${source}\\\`{3}`, 's');
+              const updatedContent = currentFileContent.replace(blockRegex, "```privateNote\n" + newSource + "```");
+              await this.app.vault.modify(currentFile, updatedContent);
+              this.releaseUuidLock();
+            }
+          }
+
+          console.log('source', source);
 
           new PrivateNote({
             target: el,
